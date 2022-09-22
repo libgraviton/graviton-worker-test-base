@@ -17,6 +17,7 @@ import com.github.libgraviton.workerbase.helper.WorkerProperties;
 import com.github.libgraviton.workerbase.messaging.MessageAcknowledger;
 import com.github.libgraviton.workerbase.model.GravitonRef;
 import com.github.libgraviton.workerbase.model.QueueEvent;
+import com.github.libgraviton.workertestbase.utils.TestExecutorService;
 import com.github.tomakehurst.wiremock.http.Body;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
 import org.junit.Before;
@@ -27,6 +28,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.*;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 
@@ -56,6 +58,9 @@ abstract public class BaseWorkerTest {
 
         DependencyInjection.init(worker, List.of());
 
+        // dummy executorService for async cases
+        DependencyInjection.getInjector().putInstance(ExecutorService.class, new TestExecutorService());
+
         // add graviton base url
         stubFor(put(urlEqualTo("/event/worker/" + properties.getProperty("graviton.workerId")))
                 .willReturn(aResponse().withStatus(200))
@@ -72,7 +77,6 @@ abstract public class BaseWorkerTest {
         if (worker.shouldAutoRegister()) {
             verify(putRequestedFor(urlEqualTo("/event/worker/" + properties.getProperty("graviton.workerId"))));
         }
-
     }
 
     public void produceQueueEvent(QueueWorkerAbstract worker, GravitonBase returnObject) throws JsonProcessingException {
