@@ -20,9 +20,9 @@ import com.github.libgraviton.workerbase.model.QueueEvent;
 import com.github.libgraviton.workertestbase.utils.TestExecutorService;
 import com.github.tomakehurst.wiremock.http.Body;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.junit.Before;
 import org.junit.Rule;
-import wiremock.org.apache.commons.lang3.RandomStringUtils;
 
 import java.io.IOException;
 import java.util.HashMap;
