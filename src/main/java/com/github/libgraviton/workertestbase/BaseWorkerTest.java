@@ -12,6 +12,7 @@ import com.github.libgraviton.workerbase.QueueWorkerAbstract;
 import com.github.libgraviton.workerbase.exception.GravitonCommunicationException;
 import com.github.libgraviton.workerbase.exception.WorkerException;
 import com.github.libgraviton.workerbase.gdk.serialization.mapper.GravitonObjectMapper;
+import com.github.libgraviton.workerbase.helper.DependencyInjection;
 import com.github.libgraviton.workerbase.helper.WorkerProperties;
 import com.github.libgraviton.workerbase.messaging.MessageAcknowledger;
 import com.github.libgraviton.workerbase.model.GravitonRef;
@@ -52,6 +53,8 @@ abstract public class BaseWorkerTest {
 
     public void prepareWorker(QueueWorkerAbstract worker) throws WorkerException, GravitonCommunicationException, IOException {
         Properties properties = WorkerProperties.load();
+
+        DependencyInjection.init(worker, List.of());
 
         // add graviton base url
         stubFor(put(urlEqualTo("/event/worker/" + properties.getProperty("graviton.workerId")))
