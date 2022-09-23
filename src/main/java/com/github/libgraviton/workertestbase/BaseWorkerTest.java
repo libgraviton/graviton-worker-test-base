@@ -12,20 +12,24 @@ import com.github.libgraviton.workerbase.QueueWorkerAbstract;
 import com.github.libgraviton.workerbase.exception.GravitonCommunicationException;
 import com.github.libgraviton.workerbase.exception.WorkerException;
 import com.github.libgraviton.workerbase.gdk.serialization.mapper.GravitonObjectMapper;
+import com.github.libgraviton.workerbase.helper.DependencyInjection;
 import com.github.libgraviton.workerbase.helper.WorkerProperties;
 import com.github.libgraviton.workerbase.messaging.MessageAcknowledger;
 import com.github.libgraviton.workerbase.model.GravitonRef;
 import com.github.libgraviton.workerbase.model.QueueEvent;
+import com.github.libgraviton.workertestbase.utils.TestExecutorService;
 import com.github.tomakehurst.wiremock.http.Body;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
+import org.apache.commons.lang3.RandomStringUtils;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
-import wiremock.org.apache.commons.lang3.RandomStringUtils;
 
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Properties;
+import java.util.concurrent.*;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 
@@ -50,8 +54,19 @@ abstract public class BaseWorkerTest {
         WorkerProperties.addOverrides(propertiesMap);
     }
 
+    @After
+    public void reset() {
+        WorkerProperties.clearOverrides();
+        DependencyInjection.clearInstanceOverrides();
+    }
+
     public void prepareWorker(QueueWorkerAbstract worker) throws WorkerException, GravitonCommunicationException, IOException {
         Properties properties = WorkerProperties.load();
+
+        DependencyInjection.init(worker, List.of());
+
+        // dummy executorService for async cases
+        DependencyInjection.addInstanceOverride(ExecutorService.class, new TestExecutorService());
 
         // add graviton base url
         stubFor(put(urlEqualTo("/event/worker/" + properties.getProperty("graviton.workerId")))
@@ -69,10 +84,9 @@ abstract public class BaseWorkerTest {
         if (worker.shouldAutoRegister()) {
             verify(putRequestedFor(urlEqualTo("/event/worker/" + properties.getProperty("graviton.workerId"))));
         }
-
     }
 
-    public void produceQueueEvent(QueueWorkerAbstract worker, GravitonBase returnObject) throws JsonProcessingException {
+    public QueueEvent produceQueueEvent(QueueWorkerAbstract worker, GravitonBase returnObject) throws JsonProcessingException {
         QueueEvent queueEvent = getQueueEvent();
 
         // special case file..
@@ -97,7 +111,6 @@ abstract public class BaseWorkerTest {
                 )
         );
 
-
         // patch to this should be accepted
         stubFor(patch(urlMatching(".*\\/" + returnObject.getId()))
                 .willReturn(
@@ -115,7 +128,7 @@ abstract public class BaseWorkerTest {
 
         worker.handleDelivery(queueEvent, queueEvent.getStatus().get$ref(), messageAcknowledger);
 
-
+        return queueEvent;
     }
 
     public File getFileForCommand(String command) {
