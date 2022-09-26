@@ -124,6 +124,10 @@ abstract public class BaseWorkerTest {
             public void acknowledge(String messageId) {
                 called = true;
             }
+            @Override
+            public void acknowledgeFail(String messageId) {
+                called = true;
+            }
         };
 
         worker.handleDelivery(queueEvent, queueEvent.getStatus().get$ref(), messageAcknowledger);
