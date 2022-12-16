@@ -3,27 +3,23 @@ package com.github.libgraviton.workertestbase;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.libgraviton.gdk.data.GravitonBase;
-import com.github.libgraviton.gdk.gravitondyn.eventstatus.document.EventStatus;
-import com.github.libgraviton.gdk.gravitondyn.eventstatus.document.EventStatusStatus;
 import com.github.libgraviton.gdk.gravitondyn.file.document.File;
-import com.github.libgraviton.gdk.gravitondyn.file.document.FileMetadata;
-import com.github.libgraviton.gdk.gravitondyn.file.document.FileMetadataAction;
 import com.github.libgraviton.workerbase.QueueWorkerAbstract;
 import com.github.libgraviton.workerbase.exception.GravitonCommunicationException;
 import com.github.libgraviton.workerbase.exception.WorkerException;
-import com.github.libgraviton.workerbase.gdk.serialization.mapper.GravitonObjectMapper;
 import com.github.libgraviton.workerbase.helper.DependencyInjection;
 import com.github.libgraviton.workerbase.helper.WorkerProperties;
 import com.github.libgraviton.workerbase.messaging.MessageAcknowledger;
 import com.github.libgraviton.workerbase.model.GravitonRef;
 import com.github.libgraviton.workerbase.model.QueueEvent;
 import com.github.libgraviton.workertestbase.utils.TestExecutorService;
+import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.http.Body;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
-import org.apache.commons.lang3.RandomStringUtils;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Rule;
+import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.extension.RegisterExtension;
 
 import java.io.IOException;
 import java.util.HashMap;
@@ -35,26 +31,28 @@ import static com.github.tomakehurst.wiremock.client.WireMock.*;
 
 abstract public class BaseWorkerTest {
 
-    @Rule
-    public WireMockRule wiremock = new WireMockRule();
+    @RegisterExtension
+    static WireMockExtension wiremock = WireMockExtension.newInstance()
+            .options(WireMockConfiguration.wireMockConfig().dynamicPort().dynamicHttpsPort())
+            .build();
 
     protected ObjectMapper objectMapper;
 
-    @Before
+    @BeforeEach
     public void prepare() throws IOException {
-        objectMapper = GravitonObjectMapper.getInstance(WorkerProperties.load());
+        objectMapper = DependencyInjection.getInstance(ObjectMapper.class);
 
         HashMap<String, String> propertiesMap = new HashMap<>();
-        propertiesMap.put("graviton.base.url", wiremock.baseUrl());
-        propertiesMap.put("graviton.workerId", "testworker");
-        propertiesMap.put("graviton.authentication.prefix.username", "subnet-");
-        propertiesMap.put("graviton.authentication.header.name", "x-graviton-authentication");
+        propertiesMap.put(WorkerProperties.GRAVITON_BASE_URL, wiremock.baseUrl());
+        propertiesMap.put(WorkerProperties.WORKER_ID, "testworker");
+        propertiesMap.put(WorkerProperties.AUTH_PREFIX_USERNAME, "subnet-");
+        propertiesMap.put(WorkerProperties.AUTH_HEADER_NAME, "x-graviton-authentication");
 
         WorkerProperties.clearOverrides();
         WorkerProperties.addOverrides(propertiesMap);
     }
 
-    @After
+    @AfterEach
     public void reset() {
         WorkerProperties.clearOverrides();
         DependencyInjection.clearInstanceOverrides();
@@ -63,7 +61,7 @@ abstract public class BaseWorkerTest {
     public void prepareWorker(QueueWorkerAbstract worker) throws WorkerException, GravitonCommunicationException, IOException {
         Properties properties = WorkerProperties.load();
 
-        DependencyInjection.init(worker, List.of());
+        DependencyInjection.init(List.of());
 
         // dummy executorService for async cases
         DependencyInjection.addInstanceOverride(ExecutorService.class, new TestExecutorService());
@@ -78,7 +76,6 @@ abstract public class BaseWorkerTest {
                 .willReturn(aResponse().withStatus(200))
         );
 
-        worker.initialize(properties);
         worker.onStartUp();
 
         if (worker.shouldAutoRegister()) {
@@ -87,7 +84,21 @@ abstract public class BaseWorkerTest {
     }
 
     public QueueEvent produceQueueEvent(QueueWorkerAbstract worker, GravitonBase returnObject) throws JsonProcessingException {
-        QueueEvent queueEvent = getQueueEvent();
+        QueueEvent queueEvent = TestUtils.getQueueEvent();
+
+        stubFor(get(urlEqualTo("/event/status/" + queueEvent.getEvent()))
+                .willReturn(
+                        aResponse().withStatus(200).withResponseBody(new Body(objectMapper.writeValueAsString(queueEvent)))
+                )
+        );
+
+        // status patches
+        stubFor(patch(urlEqualTo("/event/status/" + queueEvent.getEvent()))
+                .willReturn(
+                        aResponse().withStatus(200)
+                )
+        );
+
 
         // special case file..
         boolean isFile = (returnObject instanceof File);
@@ -101,7 +112,7 @@ abstract public class BaseWorkerTest {
         }
 
         GravitonRef documentRef = new GravitonRef();
-        documentRef.set$ref(wiremock.baseUrl() + docUrl);
+        documentRef.set$ref(WorkerProperties.getProperty(WorkerProperties.GRAVITON_BASE_URL) + docUrl);
 
         queueEvent.setDocument(documentRef);
 
@@ -130,66 +141,9 @@ abstract public class BaseWorkerTest {
             }
         };
 
-        worker.handleDelivery(queueEvent, queueEvent.getStatus().get$ref(), messageAcknowledger);
+
+        //worker.handleDelivery(queueEvent, queueEvent.getStatus().get$ref(), messageAcknowledger);
 
         return queueEvent;
-    }
-
-    public File getFileForCommand(String command) {
-        String id = getRandomString();
-        File gravitonFile = new File();
-        gravitonFile.setId(id);
-        FileMetadata metadata = new FileMetadata();
-
-        FileMetadataAction action = new FileMetadataAction();
-        action.setCommand(command);
-
-        metadata.setAction(List.of(action));
-
-        gravitonFile.setMetadata(metadata);
-
-        return gravitonFile;
-    }
-
-    public QueueEvent getQueueEvent() throws JsonProcessingException {
-        String id = getRandomString();
-        QueueEvent queueEvent = new QueueEvent();
-
-        // setup eventstatus
-        EventStatus eventStatus = new EventStatus();
-        eventStatus.setEventName("testevent");
-        eventStatus.setId(id);
-
-        EventStatusStatus eventStatusStatus = new EventStatusStatus();
-        eventStatusStatus.setStatus(EventStatusStatus.Status.OPENED);
-        eventStatusStatus.setWorkerId("testworker");
-
-        eventStatus.setStatus(List.of(eventStatusStatus));
-
-        String eventStatusUrl = wiremock.baseUrl() + "/event/status/" + id;
-
-        stubFor(get(urlEqualTo("/event/status/" + id))
-                .willReturn(
-                        aResponse().withStatus(200).withResponseBody(new Body(objectMapper.writeValueAsString(eventStatus)))
-                )
-        );
-
-        // status patches
-        stubFor(patch(urlEqualTo("/event/status/" + id))
-                .willReturn(
-                        aResponse().withStatus(200)
-                )
-        );
-
-        GravitonRef ref = new GravitonRef();
-        ref.set$ref(eventStatusUrl);
-
-        queueEvent.setStatus(ref);
-
-        return queueEvent;
-    }
-
-    public String getRandomString() {
-        return RandomStringUtils.randomAlphanumeric(25);
     }
 }
