@@ -53,6 +53,7 @@ public class WorkerTestExtension implements
 
         if (startWiremock) {
             startWiremock();
+            WorkerProperties.setOverride(WorkerProperties.GRAVITON_BASE_URL, wireMockServer.baseUrl());
         }
     }
 
