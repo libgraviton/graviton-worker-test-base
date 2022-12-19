@@ -15,6 +15,7 @@ import com.github.libgraviton.workerbase.messaging.exception.CannotPublishMessag
 import com.github.libgraviton.workerbase.model.GravitonRef;
 import com.github.libgraviton.workerbase.model.QueueEvent;
 import com.github.tomakehurst.wiremock.WireMockServer;
+import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.http.Body;
 import org.junit.jupiter.api.extension.*;
@@ -25,6 +26,7 @@ import org.testcontainers.containers.RabbitMQContainer;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.CountDownLatch;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 
@@ -112,6 +114,14 @@ public class WorkerTestExtension implements
         return getQueueEvent(transientHeaders, coreUserId, null);
     }
 
+    public CountDownLatch getCountDownLatch(int countdown, WorkerLauncher launcher) {
+        final CountDownLatch countDownLatch = new CountDownLatch(countdown);
+        launcher.getQueueWorkerRunner().addOnCompleteCallback((duration) -> {
+            countDownLatch.countDown();
+        });
+        return countDownLatch;
+    }
+
     public QueueEvent getQueueEvent(Map<String, String> transientHeaders, String coreUserId, GravitonBase returnObject) throws JsonProcessingException {
         String id = TestUtils.getRandomString();
         QueueEvent queueEvent = new QueueEvent();
@@ -136,7 +146,11 @@ public class WorkerTestExtension implements
 
             queueEvent.setDocument(documentRef);
 
-            wireMockServer.stubFor(get(urlEqualTo(docUrl)).withHeader("Accept", containing("application/json"))
+            MappingBuilder stub = get(urlEqualTo(docUrl));
+            transientHeaders.forEach((k, v) -> stub.withHeader(k, equalTo(v)));
+
+            wireMockServer.stubFor(stub
+                    .withHeader("Accept", containing("application/json"))
                     .willReturn(
                             aResponse().withStatus(200).withResponseBody(new Body(objectMapper.writeValueAsString(returnObject)))
                     )
@@ -220,13 +234,6 @@ public class WorkerTestExtension implements
         wireMockServer.stubFor(put(urlMatching("/event/worker/(.*)"))
                 .willReturn(
                         aResponse().withStatus(201)
-                )
-                .atPriority(Integer.MAX_VALUE)
-        );
-
-        wireMockServer.stubFor(get(urlMatching("/event/status/(.*)"))
-                .willReturn(
-                        aResponse().withBodyFile("eventStatusResponse.json").withStatus(200)
                 )
                 .atPriority(Integer.MAX_VALUE)
         );
