@@ -42,7 +42,7 @@ public class TestUtils {
 
         eventStatus.setStatus(List.of(eventStatusStatus));
 
-        String eventStatusUrl = WorkerProperties.getProperty(WorkerProperties.GRAVITON_BASE_URL) + "/event/status/" + id;
+        String eventStatusUrl = WorkerProperties.GRAVITON_BASE_URL.get() + "/event/status/" + id;
 
         stubFor(get(urlEqualTo("/event/status/" + id))
                 .willReturn(

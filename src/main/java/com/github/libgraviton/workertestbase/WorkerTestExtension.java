@@ -55,7 +55,7 @@ public class WorkerTestExtension implements
 
         if (startWiremock) {
             startWiremock();
-            WorkerProperties.setOverride(WorkerProperties.GRAVITON_BASE_URL, wireMockServer.baseUrl());
+            WorkerProperties.setOverride(WorkerProperties.GRAVITON_BASE_URL.toString(), wireMockServer.baseUrl());
         }
     }
 
@@ -142,7 +142,7 @@ public class WorkerTestExtension implements
             }
 
             GravitonRef documentRef = new GravitonRef();
-            documentRef.set$ref(WorkerProperties.getProperty(WorkerProperties.GRAVITON_BASE_URL) + docUrl);
+            documentRef.set$ref(WorkerProperties.GRAVITON_BASE_URL.get() + docUrl);
 
             queueEvent.setDocument(documentRef);
 
@@ -169,11 +169,11 @@ public class WorkerTestExtension implements
 
         EventStatusStatus eventStatusStatus = new EventStatusStatus();
         eventStatusStatus.setStatus(EventStatusStatus.Status.OPENED);
-        eventStatusStatus.setWorkerId(WorkerProperties.getProperty(WorkerProperties.WORKER_ID));
+        eventStatusStatus.setWorkerId(WorkerProperties.WORKER_ID.get());
 
         eventStatus.setStatus(List.of(eventStatusStatus));
 
-        String eventStatusUrl = WorkerProperties.getProperty(WorkerProperties.GRAVITON_BASE_URL) + "/event/status/" + id;
+        String eventStatusUrl = WorkerProperties.GRAVITON_BASE_URL.get() + "/event/status/" + id;
 
         LOG.info("********* EVENT STATUS URL {}", eventStatusUrl);
 
