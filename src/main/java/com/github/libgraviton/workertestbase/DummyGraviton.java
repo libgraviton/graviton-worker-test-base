@@ -7,10 +7,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.*;
 
 public class DummyGraviton {
     public static void main(String[] args) {
-
-
-
-        WireMockServer wireMockServer = new WireMockServer(WireMockConfiguration.options().port(8080)); //No-args constructor will start on port 8080, no HTTPS
+        WireMockServer wireMockServer = new WireMockServer(WireMockConfiguration.options().port(8081)); //No-args constructor will start on port 8080, no HTTPS
         wireMockServer.start();
 
         wireMockServer.stubFor(post(urlEqualTo("/event/worker"))
@@ -22,6 +19,12 @@ public class DummyGraviton {
         wireMockServer.stubFor(put(urlMatching("/event/worker/(.*)"))
                 .willReturn(
                         aResponse().withStatus(201)
+                )
+        );
+
+        wireMockServer.stubFor(options(urlEqualTo("/"))
+                .willReturn(
+                        aResponse().withStatus(200)
                 )
         );
     }
