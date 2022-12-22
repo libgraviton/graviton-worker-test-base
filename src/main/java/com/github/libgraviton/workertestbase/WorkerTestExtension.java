@@ -21,8 +21,12 @@ import com.github.tomakehurst.wiremock.http.Body;
 import org.junit.jupiter.api.extension.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.testcontainers.containers.BindMode;
+import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.RabbitMQContainer;
+import org.testcontainers.utility.DockerImageName;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -38,12 +42,26 @@ public class WorkerTestExtension implements
 
     private static final Logger LOG = LoggerFactory.getLogger(WorkerTestExtension.class);
     private boolean startWiremock = false;
+
+    /**
+     * mongodb
+     */
+    private boolean startMongodb = false;
+    private String mongodbImage = "mongo:6.0";
+    private final HashMap<String, String> mongoDbResourcesClassPathMapping = new HashMap<>();
+
+    /**
+     * rabbitmq
+     */
     private boolean startRabbitMq = false;
+    private String rabbitmqImage = "rabbitmq:3-management";
+    private final HashMap<String, String> rabbitmqResourcesClassPathMapping = new HashMap<>();
 
     protected static ObjectMapper objectMapper;
 
     protected static WireMockServer wireMockServer;
     protected static RabbitMQContainer rabbitMQContainer;
+    protected static MongoDBContainer mongoDBContainer;
     protected static QueueManager queueManager;
 
     @Override
@@ -73,6 +91,9 @@ public class WorkerTestExtension implements
             startRabbitMq();
             queueManager = DependencyInjection.getInstance(QueueManager.class);
         }
+        if (startMongodb) {
+            startMongoDb();
+        }
     }
 
     @Override
@@ -82,6 +103,10 @@ public class WorkerTestExtension implements
         if (rabbitMQContainer != null) {
             rabbitMQContainer.stop();
             rabbitMQContainer = null;
+        }
+        if (mongoDBContainer != null) {
+            mongoDBContainer.stop();
+            mongoDBContainer = null;
         }
         if (wireMockServer != null) {
             resetWiremock();
@@ -93,9 +118,42 @@ public class WorkerTestExtension implements
         return this;
     }
 
+    public WorkerTestExtension setMongoDbImage(String mongodbImage) {
+        this.mongodbImage = mongodbImage;
+        return this;
+    }
+
+    public WorkerTestExtension addMongoDbClassmapResourceMapping(String resourceName, String mappingPath) {
+        mongoDbResourcesClassPathMapping.put(resourceName, mappingPath);
+        return this;
+    }
+
     public WorkerTestExtension setStartRabbitMq(boolean startRabbitMq) {
         this.startRabbitMq = startRabbitMq;
         return this;
+    }
+
+    public WorkerTestExtension setStartMongoDb(boolean startMongodb) {
+        this.startMongodb = startMongodb;
+        return this;
+    }
+
+    public WorkerTestExtension setRabbitmqImage(String rabbitmqImage) {
+        this.rabbitmqImage = rabbitmqImage;
+        return this;
+    }
+
+    public WorkerTestExtension addRabbitMqClassmapResourceMapping(String resourceName, String mappingPath) {
+        rabbitmqResourcesClassPathMapping.put(resourceName, mappingPath);
+        return this;
+    }
+
+    public RabbitMQContainer getRabbitMQContainer() {
+        return rabbitMQContainer;
+    }
+
+    public MongoDBContainer getMongoDBContainer() {
+        return mongoDBContainer;
     }
 
     public WireMockServer getWireMockServer() {
@@ -151,11 +209,15 @@ public class WorkerTestExtension implements
 
             wireMockServer.stubFor(stub
                     .withHeader("Accept", containing("application/json"))
+                    .withHeader(WorkerProperties.AUTH_HEADER_NAME.get(), equalTo(WorkerProperties.AUTH_PREFIX_USERNAME.get()
+                            .concat(WorkerProperties.WORKER_ID.get())))
                     .willReturn(
                             aResponse().withStatus(200).withResponseBody(new Body(objectMapper.writeValueAsString(returnObject)))
                     )
             );
             wireMockServer.stubFor(patch(urlEqualTo(docUrl))
+                    .withHeader(WorkerProperties.AUTH_HEADER_NAME.get(), equalTo(WorkerProperties.AUTH_PREFIX_USERNAME.get()
+                            .concat(WorkerProperties.WORKER_ID.get())))
                     .willReturn(
                             aResponse().withStatus(201)
                     )
@@ -178,6 +240,8 @@ public class WorkerTestExtension implements
         LOG.info("********* EVENT STATUS URL {}", eventStatusUrl);
 
         wireMockServer.stubFor(get(urlEqualTo("/event/status/" + id))
+                .withHeader(WorkerProperties.AUTH_HEADER_NAME.get(), equalTo(WorkerProperties.AUTH_PREFIX_USERNAME.get()
+                        .concat(WorkerProperties.WORKER_ID.get())))
                 .willReturn(
                         aResponse().withStatus(200).withResponseBody(new Body(objectMapper.writeValueAsString(eventStatus)))
                 )
@@ -186,6 +250,8 @@ public class WorkerTestExtension implements
 
         // status patches
         wireMockServer.stubFor(patch(urlEqualTo("/event/status/" + id))
+                .withHeader(WorkerProperties.AUTH_HEADER_NAME.get(), equalTo(WorkerProperties.AUTH_PREFIX_USERNAME.get()
+                        .concat(WorkerProperties.WORKER_ID.get())))
                 .willReturn(
                         aResponse().withStatus(200)
                 )
@@ -225,6 +291,8 @@ public class WorkerTestExtension implements
         );
 
         wireMockServer.stubFor(post(urlEqualTo("/event/worker"))
+                .withHeader(WorkerProperties.AUTH_HEADER_NAME.get(), equalTo(WorkerProperties.AUTH_PREFIX_USERNAME.get()
+                        .concat(WorkerProperties.WORKER_ID.get())))
                 .willReturn(
                         aResponse().withStatus(201)
                 )
@@ -232,6 +300,8 @@ public class WorkerTestExtension implements
         );
 
         wireMockServer.stubFor(put(urlMatching("/event/worker/(.*)"))
+                .withHeader(WorkerProperties.AUTH_HEADER_NAME.get(), equalTo(WorkerProperties.AUTH_PREFIX_USERNAME.get()
+                        .concat(WorkerProperties.WORKER_ID.get())))
                 .willReturn(
                         aResponse().withStatus(201)
                 )
@@ -246,10 +316,21 @@ public class WorkerTestExtension implements
     }
 
     private void startRabbitMq() {
-        rabbitMQContainer = new RabbitMQContainer("rabbitmq:3-management").withAdminPassword(null);
+        rabbitMQContainer = new RabbitMQContainer(rabbitmqImage).withAdminPassword(null);
+        rabbitmqResourcesClassPathMapping.forEach((k, v) -> {
+            rabbitMQContainer = rabbitMQContainer.withClasspathResourceMapping(k, v, BindMode.READ_WRITE);
+        });
         rabbitMQContainer.start();
 
         WorkerProperties.setOverride("queue.port", String.valueOf(rabbitMQContainer.getAmqpPort()));
+    }
+
+    private void startMongoDb() {
+        mongoDBContainer = new MongoDBContainer(DockerImageName.parse(mongodbImage));
+        mongoDbResourcesClassPathMapping.forEach((k, v) -> {
+            mongoDBContainer = mongoDBContainer.withClasspathResourceMapping(k, v, BindMode.READ_WRITE);
+        });
+        mongoDBContainer.start();
     }
 
 }
