@@ -67,14 +67,14 @@ public class WorkerTestExtension implements
     @Override
     public void beforeAll(ExtensionContext context) throws Exception {
         WorkerProperties.load();
-        DependencyInjection.init();
-
-        objectMapper = DependencyInjection.getInstance(ObjectMapper.class);
 
         if (startWiremock) {
             startWiremock();
-            WorkerProperties.setOverride(WorkerProperties.GRAVITON_BASE_URL.toString(), wireMockServer.baseUrl());
         }
+
+        DependencyInjection.init();
+
+        objectMapper = DependencyInjection.getInstance(ObjectMapper.class);
     }
 
     @Override
@@ -89,7 +89,8 @@ public class WorkerTestExtension implements
     public void beforeEach(ExtensionContext context) throws Exception {
         if (startRabbitMq) {
             startRabbitMq();
-            queueManager = DependencyInjection.getInstance(QueueManager.class);
+            queueManager = new QueueManager(WorkerProperties.load());
+            DependencyInjection.addInstanceOverride(QueueManager.class, queueManager);
         }
         if (startMongodb) {
             startMongoDb();
@@ -98,16 +99,21 @@ public class WorkerTestExtension implements
 
     @Override
     public void afterEach(ExtensionContext context) throws Exception {
-        WorkerProperties.clearOverrides();
-
         if (rabbitMQContainer != null) {
             rabbitMQContainer.stop();
             rabbitMQContainer = null;
+        }
+        if (queueManager != null) {
+            queueManager.close();
+            queueManager = null;
         }
         if (mongoDBContainer != null) {
             mongoDBContainer.stop();
             mongoDBContainer = null;
         }
+
+        WorkerProperties.clearOverrides();
+
         if (wireMockServer != null) {
             resetWiremock();
         }
@@ -282,6 +288,8 @@ public class WorkerTestExtension implements
     }
 
     private void resetWiremock() {
+        WorkerProperties.setOverride(WorkerProperties.GRAVITON_BASE_URL.toString(), wireMockServer.baseUrl());
+
         wireMockServer.resetAll();
         wireMockServer.stubFor(options(urlEqualTo("/"))
                 .willReturn(
