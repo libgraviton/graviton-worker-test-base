@@ -37,7 +37,7 @@ public class TestUtils {
 
         EventStatusStatus eventStatusStatus = new EventStatusStatus();
         eventStatusStatus.setStatus(EventStatusStatus.Status.OPENED);
-        eventStatusStatus.setId(id);
+        //eventStatusStatus.setId(id);
         eventStatusStatus.setWorkerId("testworker");
 
         eventStatus.setStatus(List.of(eventStatusStatus));
