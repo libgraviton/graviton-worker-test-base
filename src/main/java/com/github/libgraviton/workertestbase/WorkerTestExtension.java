@@ -18,6 +18,12 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.http.Body;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.result.InsertManyResult;
+import org.bson.Document;
+import org.json.JSONObject;
 import org.junit.jupiter.api.extension.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -49,6 +55,7 @@ public class WorkerTestExtension implements
     private boolean startMongodb = false;
     private String mongodbImage = "mongo:6.0";
     private final HashMap<String, String> mongoDbResourcesClassPathMapping = new HashMap<>();
+    private String mongoDbName = "db";
 
     /**
      * rabbitmq
@@ -132,6 +139,20 @@ public class WorkerTestExtension implements
     public WorkerTestExtension addMongoDbClassmapResourceMapping(String resourceName, String mappingPath) {
         mongoDbResourcesClassPathMapping.put(resourceName, mappingPath);
         return this;
+    }
+
+    public WorkerTestExtension setMongoDbName(String mongoDbName) {
+        this.mongoDbName = mongoDbName;
+        return this;
+    }
+
+    public MongoClient getMongoClient() {
+        return MongoClients.create(mongoDBContainer.getConnectionString());
+    }
+
+    public InsertManyResult loadMongoDbFixtures(String collectionName, Document... doc) {
+        MongoCollection<Document> coll = getMongoClient().getDatabase(mongoDbName).getCollection(collectionName);
+        return coll.insertMany(List.of(doc));
     }
 
     public WorkerTestExtension setStartRabbitMq(boolean startRabbitMq) {
@@ -270,6 +291,35 @@ public class WorkerTestExtension implements
         queueEvent.setStatus(ref);
 
         return queueEvent;
+    }
+
+    public String prepareGatewayLogin(String username, String password) {
+
+        String token = TestUtils.getRandomString(60);
+        JSONObject authResponse = new JSONObject();
+        authResponse.put("token", token);
+
+        wireMockServer.stubFor(post(urlEqualTo("/auth"))
+                        .withRequestBody(and(
+                                containing("username"),
+                                containing("password"),
+                                containing(username),
+                                containing(password)
+                        ))
+                .willReturn(
+                        aResponse().withStatus(200).withResponseBody(new Body(authResponse.toString()))
+                )
+                .atPriority(100)
+        );
+
+        wireMockServer.stubFor(get(urlEqualTo("/security/logout"))
+                .withHeader("x-rest-token", equalTo(token))
+                .willReturn(
+                        aResponse().withStatus(200)
+                )
+        );
+
+        return token;
     }
 
     public WorkerLauncher getWrappedWorker(Class<? extends WorkerInterface> clazz) throws Exception {
