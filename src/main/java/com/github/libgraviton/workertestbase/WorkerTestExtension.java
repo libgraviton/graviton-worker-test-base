@@ -22,6 +22,7 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.result.InsertManyResult;
+import org.apache.commons.io.IOUtils;
 import org.bson.Document;
 import org.json.JSONObject;
 import org.junit.jupiter.api.extension.*;
@@ -32,6 +33,9 @@ import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -126,6 +130,17 @@ public class WorkerTestExtension implements
         }
     }
 
+    public String getResourceFileContent(String name) throws IOException {
+        String content = null;
+        try (InputStream contentStream = getClass().getClassLoader().getResourceAsStream(name)) {
+            if (contentStream != null) {
+                content = IOUtils.toString(contentStream, StandardCharsets.UTF_8);
+            }
+        }
+
+        return content;
+    }
+
     public WorkerTestExtension setStartWiremock(boolean startWiremock) {
         this.startWiremock = startWiremock;
         return this;
@@ -148,6 +163,10 @@ public class WorkerTestExtension implements
 
     public MongoClient getMongoClient() {
         return MongoClients.create(mongoDBContainer.getConnectionString());
+    }
+
+    public MongoCollection<Document> getMongoCollection(String name) {
+        return getMongoClient().getDatabase(mongoDbName).getCollection(name);
     }
 
     public InsertManyResult loadMongoDbFixtures(String collectionName, Document... doc) {
