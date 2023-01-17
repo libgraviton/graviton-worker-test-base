@@ -22,6 +22,7 @@ import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.result.InsertManyResult;
+import okhttp3.HttpUrl;
 import org.apache.commons.io.IOUtils;
 import org.bson.Document;
 import org.json.JSONObject;
@@ -387,9 +388,27 @@ public class WorkerTestExtension implements
     }
 
     private void startWiremock() {
-        wireMockServer = new WireMockServer(WireMockConfiguration.options().port(8080)); //No-args constructor will start on port 8080, no HTTPS
+        wireMockServer = new WireMockServer(WireMockConfiguration.options().dynamicPort().dynamicHttpsPort()); //No-args constructor will start on port 8080, no HTTPS
         wireMockServer.start();
         resetWiremock();
+    }
+
+    public String getWiremockUrl() {
+        return getWiremockUrl(false);
+    }
+
+    public String getWiremockUrl(boolean https) {
+        if (!https) {
+            return wireMockServer.baseUrl();
+        }
+
+        HttpUrl url = HttpUrl.parse(wireMockServer.baseUrl())
+                .newBuilder()
+                .port(wireMockServer.httpsPort())
+                .scheme("https")
+                .build();
+
+        return url.toString();
     }
 
     private void startRabbitMq() {
