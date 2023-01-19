@@ -18,6 +18,14 @@ import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.http.Body;
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.result.InsertManyResult;
+import okhttp3.HttpUrl;
+import org.apache.commons.io.IOUtils;
+import org.bson.Document;
+import org.json.JSONObject;
 import org.junit.jupiter.api.extension.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +34,9 @@ import org.testcontainers.containers.MongoDBContainer;
 import org.testcontainers.containers.RabbitMQContainer;
 import org.testcontainers.utility.DockerImageName;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -49,6 +60,7 @@ public class WorkerTestExtension implements
     private boolean startMongodb = false;
     private String mongodbImage = "mongo:6.0";
     private final HashMap<String, String> mongoDbResourcesClassPathMapping = new HashMap<>();
+    private String mongoDbName = "db";
 
     /**
      * rabbitmq
@@ -119,6 +131,17 @@ public class WorkerTestExtension implements
         }
     }
 
+    public String getResourceFileContent(String name) throws IOException {
+        String content = null;
+        try (InputStream contentStream = getClass().getClassLoader().getResourceAsStream(name)) {
+            if (contentStream != null) {
+                content = IOUtils.toString(contentStream, StandardCharsets.UTF_8);
+            }
+        }
+
+        return content;
+    }
+
     public WorkerTestExtension setStartWiremock(boolean startWiremock) {
         this.startWiremock = startWiremock;
         return this;
@@ -132,6 +155,24 @@ public class WorkerTestExtension implements
     public WorkerTestExtension addMongoDbClassmapResourceMapping(String resourceName, String mappingPath) {
         mongoDbResourcesClassPathMapping.put(resourceName, mappingPath);
         return this;
+    }
+
+    public WorkerTestExtension setMongoDbName(String mongoDbName) {
+        this.mongoDbName = mongoDbName;
+        return this;
+    }
+
+    public MongoClient getMongoClient() {
+        return MongoClients.create(mongoDBContainer.getConnectionString());
+    }
+
+    public MongoCollection<Document> getMongoCollection(String name) {
+        return getMongoClient().getDatabase(mongoDbName).getCollection(name);
+    }
+
+    public InsertManyResult loadMongoDbFixtures(String collectionName, Document... doc) {
+        MongoCollection<Document> coll = getMongoClient().getDatabase(mongoDbName).getCollection(collectionName);
+        return coll.insertMany(List.of(doc));
     }
 
     public WorkerTestExtension setStartRabbitMq(boolean startRabbitMq) {
@@ -272,6 +313,35 @@ public class WorkerTestExtension implements
         return queueEvent;
     }
 
+    public String prepareGatewayLogin(String username, String password) {
+
+        String token = TestUtils.getRandomString(60);
+        JSONObject authResponse = new JSONObject();
+        authResponse.put("token", token);
+
+        wireMockServer.stubFor(post(urlEqualTo("/auth"))
+                        .withRequestBody(and(
+                                containing("username"),
+                                containing("password"),
+                                containing(username),
+                                containing(password)
+                        ))
+                .willReturn(
+                        aResponse().withStatus(200).withResponseBody(new Body(authResponse.toString()))
+                )
+                .atPriority(100)
+        );
+
+        wireMockServer.stubFor(get(urlEqualTo("/security/logout"))
+                .withHeader("x-rest-token", equalTo(token))
+                .willReturn(
+                        aResponse().withStatus(200)
+                )
+        );
+
+        return token;
+    }
+
     public WorkerLauncher getWrappedWorker(Class<? extends WorkerInterface> clazz) throws Exception {
         Properties properties = DependencyInjection.getInstance(Properties.class);
         WorkerInterface worker = DependencyInjection.getInstance(clazz);
@@ -318,9 +388,27 @@ public class WorkerTestExtension implements
     }
 
     private void startWiremock() {
-        wireMockServer = new WireMockServer(WireMockConfiguration.options().port(8080)); //No-args constructor will start on port 8080, no HTTPS
+        wireMockServer = new WireMockServer(WireMockConfiguration.options().dynamicPort().dynamicHttpsPort()); //No-args constructor will start on port 8080, no HTTPS
         wireMockServer.start();
         resetWiremock();
+    }
+
+    public String getWiremockUrl() {
+        return getWiremockUrl(false);
+    }
+
+    public String getWiremockUrl(boolean https) {
+        if (!https) {
+            return wireMockServer.baseUrl();
+        }
+
+        HttpUrl url = HttpUrl.parse(wireMockServer.baseUrl())
+                .newBuilder()
+                .port(wireMockServer.httpsPort())
+                .scheme("https")
+                .build();
+
+        return url.toString();
     }
 
     private void startRabbitMq() {

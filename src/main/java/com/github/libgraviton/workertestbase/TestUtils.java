@@ -19,7 +19,11 @@ import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 public class TestUtils {
 
     public static String getRandomString() {
-        return RandomStringUtils.randomAlphanumeric(25);
+        return getRandomString(25);
+    }
+
+    public static String getRandomString(int length) {
+        return RandomStringUtils.randomAlphanumeric(length);
     }
 
 
