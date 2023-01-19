@@ -82,6 +82,7 @@ public class WorkerTestExtension implements
 
         if (startWiremock) {
             startWiremock();
+            WorkerProperties.setOverride(WorkerProperties.GRAVITON_BASE_URL.toString(), wireMockServer.baseUrl());
         }
 
         DependencyInjection.init();
@@ -128,6 +129,7 @@ public class WorkerTestExtension implements
 
         if (wireMockServer != null) {
             resetWiremock();
+            WorkerProperties.setOverride(WorkerProperties.GRAVITON_BASE_URL.toString(), wireMockServer.baseUrl());
         }
     }
 
