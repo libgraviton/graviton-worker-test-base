@@ -82,7 +82,7 @@ public class WorkerTestExtension implements
 
         if (startWiremock) {
             startWiremock();
-            WorkerProperties.setOverride(WorkerProperties.GRAVITON_BASE_URL.toString(), wireMockServer.baseUrl());
+            WorkerProperties.setOverride(WorkerProperties.GRAVITON_BASE_URL.toString(), getWiremockUrl());
         }
 
         DependencyInjection.init();
@@ -129,7 +129,6 @@ public class WorkerTestExtension implements
 
         if (wireMockServer != null) {
             resetWiremock();
-            WorkerProperties.setOverride(WorkerProperties.GRAVITON_BASE_URL.toString(), wireMockServer.baseUrl());
         }
     }
 
@@ -360,7 +359,7 @@ public class WorkerTestExtension implements
     }
 
     private void resetWiremock() {
-        WorkerProperties.setOverride(WorkerProperties.GRAVITON_BASE_URL.toString(), wireMockServer.baseUrl());
+        WorkerProperties.setOverride(WorkerProperties.GRAVITON_BASE_URL.toString(), getWiremockUrl());
 
         wireMockServer.resetAll();
         wireMockServer.stubFor(options(urlEqualTo("/"))
@@ -390,7 +389,9 @@ public class WorkerTestExtension implements
     }
 
     private void startWiremock() {
-        wireMockServer = new WireMockServer(WireMockConfiguration.options().dynamicPort().dynamicHttpsPort()); //No-args constructor will start on port 8080, no HTTPS
+        wireMockServer = new WireMockServer(
+                WireMockConfiguration.options().dynamicHttpsPort().dynamicPort()
+        );
         wireMockServer.start();
         resetWiremock();
     }
@@ -400,17 +401,29 @@ public class WorkerTestExtension implements
     }
 
     public String getWiremockUrl(boolean https) {
+        String url;
         if (!https) {
-            return wireMockServer.baseUrl();
+            url = new HttpUrl.Builder()
+                    .scheme("http")
+                    .port(wireMockServer.port())
+                    .host("localhost")
+                    .build()
+                    .toString();
+        } else {
+            url = new HttpUrl.Builder()
+                    .scheme("https")
+                    .port(wireMockServer.httpsPort())
+                    .host("localhost")
+                    .build()
+                    .toString();
         }
 
-        HttpUrl url = HttpUrl.parse(wireMockServer.baseUrl())
-                .newBuilder()
-                .port(wireMockServer.httpsPort())
-                .scheme("https")
-                .build();
+        // no / at the end..
+        if (url.endsWith("/")) {
+            url = url.substring(0, url.length()-1);
+        }
 
-        return url.toString();
+        return url;
     }
 
     private void startRabbitMq() {
