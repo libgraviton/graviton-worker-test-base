@@ -433,6 +433,7 @@ public class WorkerTestExtension implements
         });
         rabbitMQContainer.start();
 
+        WorkerProperties.setOverride("queue.host", String.valueOf(rabbitMQContainer.getHost()));
         WorkerProperties.setOverride("queue.port", String.valueOf(rabbitMQContainer.getAmqpPort()));
     }
 
