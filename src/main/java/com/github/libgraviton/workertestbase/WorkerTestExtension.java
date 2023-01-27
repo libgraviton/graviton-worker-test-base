@@ -72,9 +72,33 @@ public class WorkerTestExtension implements
     protected static ObjectMapper objectMapper;
 
     protected static WireMockServer wireMockServer;
+    protected WiremockKeepingTrackDoneEventStatus wireMockKeepingTrackDoneEventStatus = new WiremockKeepingTrackDoneEventStatus();
+
     protected static RabbitMQContainer rabbitMQContainer;
+    protected static ConfigureRabbitMQContainer configureRabbitMQContainer;
+
     protected static MongoDBContainer mongoDBContainer;
+    protected static ConfigureMongoDbContainer configureMongoDBContainer;
     protected static QueueManager queueManager;
+
+    @FunctionalInterface
+    public interface ConfigureMongoDbContainer {
+        MongoDBContainer configure(MongoDBContainer mongoDBContainer);
+    }
+    @FunctionalInterface
+    public interface ConfigureRabbitMQContainer {
+        RabbitMQContainer configure(RabbitMQContainer rabbitMQContainer);
+    }
+
+    public WorkerTestExtension configureRabbitMQContainer(ConfigureRabbitMQContainer configureRabbitMQContainer2) {
+        configureRabbitMQContainer = configureRabbitMQContainer2;
+        return this;
+    }
+
+    public WorkerTestExtension configureMongoDBContainer(ConfigureMongoDbContainer configureMongoDBContainer2) {
+        configureMongoDBContainer = configureMongoDBContainer2;
+        return this;
+    }
 
     @Override
     public void beforeAll(ExtensionContext context) throws Exception {
@@ -130,6 +154,8 @@ public class WorkerTestExtension implements
         if (wireMockServer != null) {
             resetWiremock();
         }
+
+        wireMockKeepingTrackDoneEventStatus.resetCallbacks();
     }
 
     public String getResourceFileContent(String name) throws IOException {
@@ -220,16 +246,9 @@ public class WorkerTestExtension implements
         return getQueueEvent(transientHeaders, coreUserId, null);
     }
 
-    public CountDownLatch getCountDownLatch(int countdown, WorkerLauncher launcher) {
-        final CountDownLatch countDownLatch = new CountDownLatch(countdown);
-        launcher.getQueueWorkerRunner().addOnCompleteCallback((duration) -> {
-            countDownLatch.countDown();
-        });
-        return countDownLatch;
-    }
-
     public QueueEvent getQueueEvent(Map<String, String> transientHeaders, String coreUserId, GravitonBase returnObject) throws JsonProcessingException {
         String id = TestUtils.getRandomString();
+
         QueueEvent queueEvent = new QueueEvent();
         queueEvent.setCoreUserId(coreUserId);
         queueEvent.setTransientHeaders(transientHeaders);
@@ -266,6 +285,7 @@ public class WorkerTestExtension implements
             wireMockServer.stubFor(patch(urlEqualTo(docUrl))
                     .withHeader(WorkerProperties.AUTH_HEADER_NAME.get(), equalTo(WorkerProperties.AUTH_PREFIX_USERNAME.get()
                             .concat(WorkerProperties.WORKER_ID.get())))
+                            .andMatching(wireMockKeepingTrackDoneEventStatus)
                     .willReturn(
                             aResponse().withStatus(201)
                     )
@@ -303,6 +323,7 @@ public class WorkerTestExtension implements
                 .willReturn(
                         aResponse().withStatus(200)
                 )
+
                 .atPriority(100)
         );
 
@@ -312,6 +333,40 @@ public class WorkerTestExtension implements
         queueEvent.setStatus(ref);
 
         return queueEvent;
+    }
+
+    public CountDownLatch getCountDownLatchForSelfTrackingWorkers(int number) {
+        final CountDownLatch latch = new CountDownLatch(number);
+
+        wireMockKeepingTrackDoneEventStatus.registerCallback(request -> {
+            boolean doneState = request.getBodyAsString().contains("\"done\"") || request.getBodyAsString().contains("\"failed\"");
+            if (doneState) {
+                latch.countDown();
+            }
+        });
+
+        return latch;
+    }
+
+    public CountDownLatch getCountDownLatch(int countdown, WorkerLauncher launcher) {
+        final CountDownLatch countDownLatch = new CountDownLatch(countdown);
+        launcher.getQueueWorkerRunner().addOnCompleteCallback((duration) -> {
+            countDownLatch.countDown();
+        });
+        return countDownLatch;
+    }
+
+    public void verifyQueueEventWasDone(QueueEvent queueEvent) {
+        getWireMockServer().verify(
+                1,
+                patchRequestedFor(urlEqualTo("/event/status/" + queueEvent.getEvent()))
+                        .withRequestBody(containing("\"working\""))
+        );
+        getWireMockServer().verify(
+                1,
+                patchRequestedFor(urlEqualTo("/event/status/" + queueEvent.getEvent()))
+                        .withRequestBody(containing("\"done\""))
+        );
     }
 
     public String prepareGatewayLogin(String username, String password) {
@@ -431,6 +486,11 @@ public class WorkerTestExtension implements
         rabbitmqResourcesClassPathMapping.forEach((k, v) -> {
             rabbitMQContainer = rabbitMQContainer.withClasspathResourceMapping(k, v, BindMode.READ_WRITE);
         });
+
+        if (configureRabbitMQContainer != null) {
+            rabbitMQContainer = configureRabbitMQContainer.configure(rabbitMQContainer);
+        }
+
         rabbitMQContainer.start();
 
         WorkerProperties.setOverride("queue.host", String.valueOf(rabbitMQContainer.getHost()));
@@ -442,6 +502,11 @@ public class WorkerTestExtension implements
         mongoDbResourcesClassPathMapping.forEach((k, v) -> {
             mongoDBContainer = mongoDBContainer.withClasspathResourceMapping(k, v, BindMode.READ_WRITE);
         });
+
+        if (configureMongoDBContainer != null) {
+            mongoDBContainer = configureMongoDBContainer.configure(mongoDBContainer);
+        }
+
         mongoDBContainer.start();
     }
 
