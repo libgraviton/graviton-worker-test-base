@@ -40,11 +40,9 @@ class WiremockKeepingTrackDoneEventStatus extends RequestMatcherExtension {
                 request.getUrl().startsWith("/event/status/")
         );
 
-        if (!isRelevant) {
-            return MatchResult.of(false);
+        if (isRelevant) {
+            callbacks.forEach(onRequestCallback -> onRequestCallback.onRequest(request));
         }
-
-        callbacks.forEach(onRequestCallback -> onRequestCallback.onRequest(request));
 
         return MatchResult.of(true);
     }
