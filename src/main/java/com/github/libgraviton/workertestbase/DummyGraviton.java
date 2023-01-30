@@ -5,7 +5,7 @@ import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 
-public class DummyGraviton {
+class DummyGraviton {
     public static void main(String[] args) {
         WireMockServer wireMockServer = new WireMockServer(WireMockConfiguration.options().port(8081)); //No-args constructor will start on port 8080, no HTTPS
         wireMockServer.start();
