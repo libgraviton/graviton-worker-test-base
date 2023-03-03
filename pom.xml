@@ -6,7 +6,7 @@
 
     <groupId>com.github.libgraviton</groupId>
     <artifactId>graviton-worker-test-base</artifactId>
-    <version>3.2.1</version>
+    <version>3.2.2</version>
 
     <properties>
         <maven.compiler.source>17</maven.compiler.source>
@@ -17,20 +17,21 @@
 
     <repositories>
         <repository>
+            <id>libgraviton-github</id>
+            <url>https://maven.pkg.github.com/libgraviton/gdk-java</url>
             <snapshots>
-                <enabled>false</enabled>
+                <enabled>true</enabled>
             </snapshots>
-            <id>artifactory</id>
-            <name>artifactory</name>
-            <url>https://bin.swisscom.com/artifactory/graviton-maven-local</url>
         </repository>
     </repositories>
 
     <distributionManagement>
         <repository>
-            <id>artifactory</id>
-            <name>artifactory</name>
-            <url>https://bin.swisscom.com/artifactory/graviton-maven-local</url>
+            <id>libgraviton-github</id>
+            <url>https://maven.pkg.github.com/libgraviton/gdk-java</url>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
         </repository>
     </distributionManagement>
 
@@ -124,36 +125,20 @@
                     <target>17</target>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-source-plugin</artifactId>
+                <version>3.2.1</version>
+                <executions>
+                    <execution>
+                        <id>attach-sources</id>
+                        <goals>
+                            <goal>jar-no-fork</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
-    <profiles>
-        <profile>
-            <id>release-sign-artifacts</id>
-            <activation>
-                <property>
-                    <name>performRelease</name>
-                    <value>true</value>
-                </property>
-            </activation>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-gpg-plugin</artifactId>
-                        <version>1.5</version>
-                        <executions>
-                            <execution>
-                                <id>sign-artifacts</id>
-                                <phase>verify</phase>
-                                <goals>
-                                    <goal>sign</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
 </project>
