@@ -86,8 +86,10 @@
         </dependency>
         <dependency>
             <groupId>com.github.libgraviton</groupId>
-            <artifactId>gdk-pojos</artifactId>
-            <version>[8.0.0,)</version>
+            <artifactId>gdk-essential-pojos</artifactId>
+            <version>[1.1.0,)</version>
+            <!-- we don't package this up - needs to be provided at runtime, which it is - so no need to exclude things -->
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.mongodb</groupId>
