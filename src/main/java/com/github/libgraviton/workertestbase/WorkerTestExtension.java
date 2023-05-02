@@ -2,6 +2,7 @@ package com.github.libgraviton.workertestbase;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.libgraviton.gdk.gravitondyn.eventstatus.document.EventStatus;
 import com.github.libgraviton.gdk.gravitondyn.eventstatus.document.EventStatusStatus;
 import com.github.libgraviton.gdk.gravitondyn.file.document.File;
@@ -25,7 +26,6 @@ import com.mongodb.client.result.InsertManyResult;
 import okhttp3.HttpUrl;
 import org.apache.commons.io.IOUtils;
 import org.bson.Document;
-import org.json.JSONObject;
 import org.junit.jupiter.api.extension.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -396,11 +396,11 @@ public class WorkerTestExtension implements
         );
     }
 
-    public String prepareGatewayLogin(String username, String password) {
-
+    public String prepareGatewayLogin(String username, String password) throws JsonProcessingException {
         String token = TestUtils.getRandomString(60);
-        JSONObject authResponse = new JSONObject();
-        authResponse.put("token", token);
+
+        ObjectNode loginNode = objectMapper.createObjectNode();
+        loginNode.put("token", token);
 
         wireMockServer.stubFor(post(urlEqualTo("/auth"))
                         .withRequestBody(and(
@@ -410,7 +410,7 @@ public class WorkerTestExtension implements
                                 containing(password)
                         ))
                 .willReturn(
-                        aResponse().withStatus(200).withResponseBody(new Body(authResponse.toString()))
+                        aResponse().withStatus(200).withResponseBody(new Body(objectMapper.writeValueAsString(loginNode)))
                 )
                 .atPriority(100)
         );
