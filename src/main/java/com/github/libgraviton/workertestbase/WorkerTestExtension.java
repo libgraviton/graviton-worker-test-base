@@ -391,6 +391,20 @@ public class WorkerTestExtension implements
         addGravitonFileResponse(url, returnObject, new Body(fileContent));
     }
 
+    public void addGravitonFileResponseWithBodyFile(String url, File returnObject, String bodyFile) throws JsonProcessingException {
+        addGravitonResponse(url, returnObject);
+
+        // file content
+        // binary File responses!
+        wireMockServer.stubFor(
+          get(urlEqualTo(url))
+            .withHeader("Accept", absent())
+            .willReturn(
+              aResponse().withStatus(200).withBodyFile(bodyFile)
+            )
+        );
+    }
+
     public void addGravitonFileResponse(String url, File returnObject, Body body) throws JsonProcessingException {
         // file rest resource
         addGravitonResponse(url, returnObject);
