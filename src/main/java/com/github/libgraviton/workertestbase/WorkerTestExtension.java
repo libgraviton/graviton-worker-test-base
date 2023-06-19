@@ -17,6 +17,7 @@ import com.github.libgraviton.workerbase.model.GravitonRef;
 import com.github.libgraviton.workerbase.model.QueueEvent;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
+import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.http.Body;
 import com.mongodb.client.MongoClient;
@@ -349,6 +350,74 @@ public class WorkerTestExtension implements
         queueEvent.setStatus(ref);
 
         return queueEvent;
+    }
+
+    /**
+     * lets you add a graviton object to be returned on the mock on a given URL
+     *
+     * @param url
+     * @param returnObject
+     */
+    public void addGravitonResponse(String url, GravitonBase returnObject) throws JsonProcessingException {
+        wireMockServer.stubFor(get(urlEqualTo(url))
+          .withHeader(WorkerProperties.AUTH_HEADER_NAME.get(), equalTo(WorkerProperties.AUTH_PREFIX_USERNAME.get()
+            .concat(WorkerProperties.WORKER_ID.get())))
+          .withHeader("Accept", containing("application/json"))
+          .willReturn(
+            aResponse().withStatus(200).withResponseBody(new Body(objectMapper.writeValueAsString(returnObject)))
+          )
+        );
+
+        wireMockServer.stubFor(
+          put(urlEqualTo(url))
+            .willReturn(aResponse().withStatus(200))
+        );
+        // /file/action for archiving
+        wireMockServer.stubFor(
+          post(urlEqualTo(url))
+            .willReturn(aResponse().withStatus(201))
+        );
+        wireMockServer.stubFor(
+          delete(urlEqualTo(url))
+            .willReturn(aResponse().withStatus(200))
+        );
+    }
+
+    public void addGravitonFileResponse(String url, File returnObject, byte[] fileContent) throws JsonProcessingException {
+        addGravitonFileResponse(url, returnObject, new Body(fileContent));
+    }
+
+    public void addGravitonFileResponse(String url, File returnObject, String fileContent) throws JsonProcessingException {
+        addGravitonFileResponse(url, returnObject, new Body(fileContent));
+    }
+
+    public void addGravitonFileResponseWithBodyFile(String url, File returnObject, String bodyFile) throws JsonProcessingException {
+        addGravitonResponse(url, returnObject);
+
+        // file content
+        // binary File responses!
+        wireMockServer.stubFor(
+          get(urlEqualTo(url))
+            .withHeader("Accept", absent())
+            .willReturn(
+              aResponse().withStatus(200).withBodyFile(bodyFile)
+            )
+        );
+    }
+
+    public void addGravitonFileResponse(String url, File returnObject, Body body) throws JsonProcessingException {
+        // file rest resource
+        addGravitonResponse(url, returnObject);
+
+        // file content
+        // binary File responses!
+        wireMockServer.stubFor(
+          get(urlEqualTo(url))
+            .withHeader("Accept", absent())
+            .willReturn(
+              aResponse().withStatus(200).withResponseBody(body)
+            )
+        );
     }
 
     public CountDownLatch getCountDownLatchForSelfTrackingWorkers(int number) {
