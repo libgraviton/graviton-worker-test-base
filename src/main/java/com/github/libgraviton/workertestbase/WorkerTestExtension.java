@@ -17,7 +17,6 @@ import com.github.libgraviton.workerbase.model.GravitonRef;
 import com.github.libgraviton.workerbase.model.QueueEvent;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.client.MappingBuilder;
-import com.github.tomakehurst.wiremock.client.ResponseDefinitionBuilder;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
 import com.github.tomakehurst.wiremock.http.Body;
 import com.mongodb.client.MongoClient;
@@ -103,6 +102,10 @@ public class WorkerTestExtension implements
         return this;
     }
 
+    public String getEventStatusEndpointUrl(String eventStatusId, String workerId, String status) {
+        return String.format("/event/status/%s/%s/%s", eventStatusId, workerId, status);
+    }
+
     @Override
     public void beforeAll(ExtensionContext context) throws Exception {
         WorkerProperties.load();
@@ -141,6 +144,13 @@ public class WorkerTestExtension implements
             startRabbitMq();
             queueManager = new QueueManager(WorkerProperties.load());
             DependencyInjection.addInstanceOverride(QueueManager.class, queueManager);
+
+            wireMockServer.stubFor(put(urlMatching("/event/status/(.*)/(.*)/(.*)"))
+              .willReturn(
+                aResponse().withStatus(404)
+              )
+              .atPriority(99999)
+            );
         }
         if (startMongodb) {
             startMongoDb();
@@ -344,6 +354,16 @@ public class WorkerTestExtension implements
                 .atPriority(100)
         );
 
+        // new status update api
+        wireMockServer.stubFor(put(urlMatching("/event/status/" + id + "/(.*)/(opened|working|ignored|done|failed)(.*)"))
+          .withHeader(WorkerProperties.AUTH_HEADER_NAME.get(), equalTo(WorkerProperties.AUTH_PREFIX_USERNAME.get()
+            .concat(WorkerProperties.WORKER_ID.get())))
+          .willReturn(
+            aResponse().withStatus(200)
+          )
+          .atPriority(100)
+        );
+
         GravitonRef ref = new GravitonRef();
         ref.set$ref(eventStatusUrl);
 
@@ -442,27 +462,42 @@ public class WorkerTestExtension implements
         return countDownLatch;
     }
 
-    public void verifyQueueEventWasDone(QueueEvent queueEvent) {
-        verifyQueueEventWasSetToStatus(queueEvent, "working");
-        verifyQueueEventWasSetToStatus(queueEvent, "done");
+    public void verifyQueueEventWasDone(String queueEventId) {
+        verifyQueueEventWasSetToStatus(queueEventId, "working");
+        verifyQueueEventWasSetToStatus(queueEventId, "done");
+        verifyQueueEventWasNotSetToStatus(queueEventId, "failed");
     }
 
-    public void verifyQueueEventWasSetToStatus(QueueEvent queueEvent, String status) {
-        getWireMockServer().verify(
-                1,
-                patchRequestedFor(urlEqualTo("/event/status/" + queueEvent.getEvent()))
-                        .withRequestBody(containing("\""+status+"\""))
-        );
+    public void verifyQueueEventWasSetToStatus(String queueEventId, String status) {
+        verifyQueueEventWasSetToStatus(queueEventId, status, null);
+    }
+    public void verifyQueueEventWasNotSetToStatus(String queueEventId, String status) {
+        verifyQueueEventWasSetToStatus(queueEventId, status, null, 0);
+    }
+    public void verifyQueueEventWasSetToStatus(String queueEventId, String status, String message) {
+        verifyQueueEventWasSetToStatus(queueEventId, status, message, 1);
     }
 
-    public void verifyQueueEventWasSetToFailed(QueueEvent queueEvent, String errorMessage) {
-        verifyQueueEventWasSetToStatus(queueEvent, "working");
-        verifyQueueEventWasSetToStatus(queueEvent, "failed");
-        getWireMockServer().verify(
-                1,
-                patchRequestedFor(urlEqualTo("/event/status/" + queueEvent.getEvent()))
-                        .withRequestBody(containing(errorMessage))
-        );
+    public void verifyQueueEventWasSetToStatus(String queueEventId, String status, String message, int count) {
+        String url = getEventStatusEndpointUrl(queueEventId, "(.*)", status) + "(.*)";
+
+        if (message == null) {
+            getWireMockServer().verify(
+              count,
+              putRequestedFor(urlMatching(url))
+            );
+        } else {
+            getWireMockServer().verify(
+              count,
+              putRequestedFor(urlMatching(url))
+                .withRequestBody(containing(message))
+            );
+        }
+    }
+
+    public void verifyQueueEventWasSetToFailed(String queueEventId, String errorMessage) {
+        verifyQueueEventWasSetToStatus(queueEventId, "working");
+        verifyQueueEventWasSetToStatus(queueEventId, "failed", errorMessage);
     }
 
     public String prepareGatewayLogin(String username, String password) throws JsonProcessingException {
