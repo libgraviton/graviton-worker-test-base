@@ -444,7 +444,7 @@ public class WorkerTestExtension implements
         final CountDownLatch latch = new CountDownLatch(number);
 
         wireMockKeepingTrackDoneEventStatus.registerCallback(request -> {
-            boolean doneState = request.getBodyAsString().contains("\"done\"") || request.getBodyAsString().contains("\"failed\"");
+            boolean doneState = request.getUrl().contains("/done") || request.getUrl().contains("/failed");
 
             if (doneState) {
                 latch.countDown();
