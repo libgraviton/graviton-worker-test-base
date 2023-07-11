@@ -456,9 +456,14 @@ public class WorkerTestExtension implements
 
     public CountDownLatch getCountDownLatch(int countdown, WorkerLauncher launcher) {
         final CountDownLatch countDownLatch = new CountDownLatch(countdown);
-        launcher.getQueueWorkerRunner().addOnCompleteCallback((duration) -> {
-            countDownLatch.countDown();
-        });
+        launcher.getQueueWorkerRunner().addCallbacks(
+          callback -> {
+            callback.addAfterCompleteCallback(
+              workingDuration -> countDownLatch.countDown(),
+              Integer.MAX_VALUE
+            );
+          }
+        );
         return countDownLatch;
     }
 
