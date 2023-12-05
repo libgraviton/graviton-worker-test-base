@@ -36,6 +36,7 @@ import org.testcontainers.utility.DockerImageName;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
@@ -595,29 +596,28 @@ public class WorkerTestExtension implements
     }
 
     public String getWiremockUrl(boolean https) {
-        String url;
-        if (!https) {
-            url = new HttpUrl.Builder()
-                    .scheme("http")
-                    .port(wireMockServer.port())
-                    .host("localhost")
-                    .build()
-                    .toString();
-        } else {
-            url = new HttpUrl.Builder()
-                    .scheme("https")
-                    .port(wireMockServer.httpsPort())
-                    .host("localhost")
-                    .build()
-                    .toString();
+        try {
+            URI uri = new URI(
+              https ? "https" : "http",
+              null,
+              "localhost",
+              https ? wireMockServer.httpsPort() : wireMockServer.port(),
+              "/",
+              null,
+              null
+            );
+
+            String url = uri.toURL().toString();
+
+            if (url.endsWith("/")) {
+                url = url.substring(0, url.length()-1);
+            }
+
+            return url;
+        } catch (Throwable t) {
         }
 
-        // no / at the end..
-        if (url.endsWith("/")) {
-            url = url.substring(0, url.length()-1);
-        }
-
-        return url;
+        return "";
     }
 
     private void startRabbitMq() {
