@@ -540,7 +540,8 @@ public class WorkerTestExtension implements
 
         return new WorkerLauncher(
                 worker,
-                properties
+                properties,
+                "test-worker"
         );
     }
 
